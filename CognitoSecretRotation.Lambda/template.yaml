@@ -1,0 +1,57 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: "AWS::Serverless-2016-10-31"
+Description: "Secret Rotation Lambda"
+Parameters:
+    CognitoUserPoolArn:
+        Type: String
+        Default: arn:aws:cognito-idp:us-west-2:959833991614:userpool/us-west-2_FPrtM1JBr
+        Description: ARN of a Cognito User Pool used for authentication and authorization of requests
+    AuthorizationUrlParameter:
+        Type: String
+        Default: "https://licensing-service.auth.us-west-2.amazoncognito.com/oauth2/token"
+        Description: Authorization URL
+Conditions: {}
+Resources:
+    SecretRotationLambdaPermission:
+        Type: AWS::Lambda::Permission
+        Properties:
+            FunctionName:
+                Fn::Sub: ${SecretRotationLambda.Arn}
+            Action: lambda:InvokeFunction
+            Principal: secretsmanager.amazonaws.com
+    SecretRotationLambda:
+        Type: "AWS::Serverless::Function"
+        Properties:
+            Handler: "CognitoSecretRotation.Lambda::CognitoSecretRotation.Lambda.Function::HandleAsync"
+            Runtime: dotnetcore3.1
+            CodeUri: ""
+            MemorySize: 256
+            Timeout: 30
+            Policies:
+                - Version: "2012-10-17"
+                  Statement:
+                      - Effect: Allow
+                        Action:
+                            - "secretsmanager:RotateSecret"
+                            - "secretsmanager:DescribeSecret"
+                            - "secretsmanager:GetSecretValue"
+                            - "secretsmanager:PutSecretValue"
+                            - "secretsmanager:UpdateSecretVersionStage"
+                        Resource:
+                            - Fn::Sub: 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:*'
+                      - Effect: Allow
+                        Action:
+                            - "cognito-idp:CreateUserPoolClient"
+                            - "cognito-idp:DeleteUserPoolClient"
+                            - "cognito-idp:DescribeUserPoolClient"
+                        Resource:
+                            - Fn::Sub: ${CognitoUserPoolArn}
+                      - Effect: Allow
+                        Action:
+                            - 'ssm:GetParametersByPath'
+                        Resource:
+                            - Fn::Sub: 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*'
+            Environment:
+                Variables:
+                    AuthorizationUrl:
+                        Ref: AuthorizationUrlParameter
